@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My AI Chat</title>
+<script src="https://js.puter.com/v2/"></script>
+<style>
+:root{--bg:#fff;--side:#f7f7f8;--text:#1a1a1a;--muted:#6b6b6b;--line:#e4e4e7;--bubble:#f0f0f1;--btn:#1a1a1a;--btntext:#fff;--code:#f6f6f7;--err:#b42318;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#212121;--side:#171717;--text:#ececec;--muted:#9b9b9b;--line:#333;--bubble:#2f2f2f;--btn:#ececec;--btntext:#171717;--code:#161616;--err:#ff8a7a;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+#app{display:flex;height:100%}
+#side{width:260px;background:var(--side);display:flex;flex-direction:column;padding:10px;gap:8px;flex-shrink:0}
+#new{border:1px solid var(--line);border-radius:10px;padding:10px 12px;text-align:left;font-weight:600}
+#list{flex:1;overflow-y:auto}
+.item{display:flex;align-items:center;gap:6px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:15px}
+.item span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item:hover,.item.on{background:var(--bubble)}
+.item button{color:var(--muted);opacity:.7;padding:0 4px}
+.foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:10px;font-size:14px}
+.foot span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.foot button{color:var(--muted);text-decoration:underline}
+main{flex:1;min-width:0;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:8px;padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top))}
+#menu{display:none;font-size:22px;padding:4px 8px}
+#model{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:7px 10px;max-width:70vw}
+#chat{flex:1;overflow-y:auto}
+#msgs{max-width:760px;margin:0 auto;padding:12px 16px 24px}
+.empty{text-align:center;font-size:28px;font-weight:600;margin-top:28vh}
+.msg{margin:18px 0}
+.msg.user{display:flex;justify-content:flex-end}
+.bub{background:var(--bubble);border-radius:18px;padding:9px 16px;max-width:85%;white-space:pre-wrap;word-wrap:break-word}
+.body{overflow-wrap:anywhere}
+.body:empty::after{content:"Thinking…";color:var(--muted)}
+.body.err{color:var(--err)}
+.body p{margin:0 0 .8em}
+.body h3,.body h4,.body h5,.body h6{margin:1em 0 .4em;line-height:1.3}
+.body ul,.body ol{margin:0 0 .8em;padding-left:1.4em}
+.body code{background:var(--code);border-radius:5px;padding:1px 5px;font:.9em ui-monospace,Menlo,Consolas,monospace}
+.body a{color:inherit}
+.code{background:var(--code);border-radius:10px;margin:.8em 0;overflow:hidden}
+.code .ch{display:flex;justify-content:space-between;padding:6px 12px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line)}
+.code pre{margin:0;padding:12px;overflow-x:auto}
+.code pre code{background:none;padding:0;font-size:14px}
+#comp{padding:8px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+#box{max-width:760px;margin:0 auto;display:flex;align-items:flex-end;gap:8px;background:var(--bubble);border-radius:24px;padding:8px 8px 8px 18px}
+#in{flex:1;border:0;outline:0;background:none;resize:none;max-height:200px;padding:6px 0;line-height:1.5}
+#go{width:36px;height:36px;border-radius:50%;background:var(--btn);color:var(--btntext);font-size:18px;flex-shrink:0}
+#go:disabled{opacity:.35}
+#gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;z-index:30}
+#gate[hidden]{display:none}
+#gate div{max-width:380px}
+#gate h1{font-size:26px;margin:0 0 10px}
+#gate p{color:var(--muted);margin:0 0 22px}
+#signin{background:var(--btn);color:var(--btntext);border-radius:12px;padding:12px 28px;font-weight:600}
+#scrim{display:none}
+:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+@media(max-width:800px){
+ #side{position:fixed;inset:0 auto 0 0;z-index:20;transform:translateX(-100%);transition:transform .2s;padding-top:max(10px,env(safe-area-inset-top))}
+ body.open #side{transform:none}
+ body.open #scrim{display:block;position:fixed;inset:0;background:#0006;z-index:10}
+ #menu{display:block}
+}
+@media(prefers-reduced-motion:reduce){#side{transition:none}}
+</style>
+</head>
+<body>
+<div id="gate" hidden>
+  <div>
+    <h1>Sign in to start chatting</h1>
+    <p>Sign in with a free Puter account. Your chats use your own Puter usage allowance, so there’s no API key to set up.</p>
+    <button id="signin">Sign in</button>
+    <p id="gerr" style="margin-top:16px;color:var(--err)"></p>
+  </div>
+</div>
+
+<div id="app">
+  <aside id="side">
+    <button id="new">+ New chat</button>
+    <div id="list"></div>
+    <div class="foot"><span id="user"></span><button id="out">Sign out</button></div>
+  </aside>
+  <div id="scrim"></div>
+  <main>
+    <header>
+      <button id="menu" aria-label="Open menu">☰</button>
+      <select id="model" aria-label="Model"></select>
+    </header>
+    <div id="chat"><div id="msgs"></div></div>
+    <div id="comp">
+      <div id="box">
+        <textarea id="in" rows="1" placeholder="Message"></textarea>
+        <button id="go" aria-label="Send">↑</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ls={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let chats=ls.get('chats',[]),cur=null,busy=false,stop=false,model=ls.get('model','gpt-5-nano');
+const FALLBACK=['gpt-5-nano','gpt-5.5','claude-sonnet-4-5','google/gemini-2.5-flash'];
+const save=()=>ls.set('chats',chats);
+
+/* ---------- markdown ---------- */
+function md(src){
+  const blocks=[];
+  src=src.replace(/```(\w*)\n?([\s\S]*?)(```|$)/g,(m,l,c)=>{
+    blocks.push(`<div class="code"><div class="ch"><span>${esc(l||'code')}</span><button data-copy>Copy</button></div><pre><code>${esc(c.replace(/\n$/,''))}</code></pre></div>`);
+    return `\u0000${blocks.length-1}\u0000`;
+  });
+  let h=esc(src)
+    .replace(/`([^`\n]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>')
+    .replace(/(^|[^*])\*([^*\s][^*\n]*)\*/g,'$1<i>$2</i>')
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const out=[];let open=null;
+  const close=()=>{if(open){out.push(`</${open}>`);open=null}};
+  const start=t=>{if(open!==t){close();out.push(`<${t}>`);open=t}};
+  for(const line of h.split('\n')){
+    let m;
+    if(m=line.match(/^(#{1,4})\s+(.*)/)){close();const n=m[1].length+2;out.push(`<h${n}>${m[2]}</h${n}>`)}
+    else if(m=line.match(/^\s*[-*]\s+(.*)/)){start('ul');out.push(`<li>${m[1]}</li>`)}
+    else if(m=line.match(/^\s*\d+[.)]\s+(.*)/)){start('ol');out.push(`<li>${m[1]}</li>`)}
+    else if(!line.trim()){close()}
+    else{close();out.push(`<p>${line}</p>`)}
+  }
+  close();
+  return out.join('').replace(/<p>\u0000(\d+)\u0000<\/p>/g,'\u0000$1\u0000').replace(/\u0000(\d+)\u0000/g,(m,i)=>blocks[i]);
+}
+
+/* ---------- rendering ---------- */
+function renderList(){
+  $('#list').innerHTML=chats.map(c=>`<div class="item${c===cur?' on':''}" data-id="${c.id}"><span>${esc(c.title)}</span><button data-del aria-label="Delete chat">✕</button></div>`).join('');
+}
+function renderMsgs(){
+  const m=cur?cur.messages:[];
+  $('#msgs').innerHTML=m.length?m.map(x=>x.role==='user'
+    ?`<div class="msg user"><div class="bub">${esc(x.content)}</div></div>`
+    :`<div class="msg ai"><div class="body${x.err?' err':''}">${md(x.content)}</div></div>`).join('')
+    :'<div class="empty">What can I help with?</div>';
+  toBottom();
+}
+const renderAll=()=>{renderList();renderMsgs()};
+const toBottom=()=>{const c=$('#chat');c.scrollTop=c.scrollHeight};
+const closeSide=()=>document.body.classList.remove('open');
+
+/* ---------- models ---------- */
+function fillModels(ids){
+  if(!ids.includes(model))ids=[model,...ids];
+  $('#model').innerHTML=ids.map(i=>`<option${i===model?' selected':''}>${esc(i)}</option>`).join('')+'<option value="__custom">Other model…</option>';
+}
+async function loadModels(){
+  let ids=FALLBACK;
+  try{
+    const l=await puter.ai.listModels();
+    const x=(Array.isArray(l)?l:[]).map(m=>typeof m==='string'?m:m&&m.id)
+      .filter(i=>i&&!/image|tts|embed|whisper|dall|video|speech|moderation|audio/i.test(i));
+    if(x.length)ids=[...new Set(x)].sort();
+  }catch(e){}
+  fillModels(ids);
+}
+$('#model').onchange=e=>{
+  let v=e.target.value;
+  if(v==='__custom'){
+    v=(prompt('Model ID, for example claude-sonnet-4-5')||'').trim();
+    if(!v){e.target.value=model;return}
+    e.target.insertBefore(new Option(v,v),e.target.lastChild);
+    e.target.value=v;
+  }
+  model=v;ls.set('model',v);
+};
+
+/* ---------- chat ---------- */
+const errMsg=e=>{
+  const m=(e&&e.error&&e.error.message)||(e&&e.message)||(typeof e==='string'?e:JSON.stringify(e));
+  return 'Error: '+m+(/credit|balance|limit|quota|insufficient/i.test(m)?' Check your balance at puter.com.':'');
+};
+function setBusy(b){busy=b;const g=$('#go');g.textContent=b?'■':'↑';g.setAttribute('aria-label',b?'Stop':'Send')}
+
+async function send(){
+  const box=$('#in'),text=box.value.trim();
+  if(busy||!text)return;
+  if(!cur){cur={id:Date.now().toString(36),title:text.slice(0,40),messages:[]};chats.unshift(cur)}
+  const c=cur,a={role:'assistant',content:''};
+  c.messages.push({role:'user',content:text},a);
+  box.value='';box.style.height='auto';
+  save();renderAll();setBusy(true);stop=false;
+  const el=$('#msgs').querySelector('.msg.ai:last-child .body');
+  try{
+    const history=c.messages.slice(0,-1).map(({role,content})=>({role,content}));
+    const res=await puter.ai.chat(history,{model,stream:true});
+    if(res&&res[Symbol.asyncIterator]){
+      for await(const p of res){
+        if(stop)break;
+        if(p&&p.text){a.content+=p.text;el.innerHTML=md(a.content);toBottom()}
+      }
+    }else{
+      const t=res&&res.message&&res.message.content;
+      a.content=typeof t==='string'?t:Array.isArray(t)?t.map(x=>x.text||'').join(''):String(res);
+    }
+  }catch(e){
+    a.content+=(a.content?'\n\n':'')+errMsg(e);a.err=true;
+  }
+  if(!a.content&&!a.err)c.messages.pop();
+  save();setBusy(false);
+  if(cur===c)renderAll();
+}
+
+/* ---------- events ---------- */
+$('#go').onclick=()=>busy?(stop=true):send();
+$('#in').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey&&matchMedia('(hover:hover)').matches){e.preventDefault();send()}
+});
+$('#in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'});
+$('#new').onclick=()=>{if(busy)return;cur=null;renderAll();closeSide();$('#in').focus()};
+$('#list').onclick=e=>{
+  if(busy)return;
+  const it=e.target.closest('.item');if(!it)return;
+  const c=chats.find(x=>x.id===it.dataset.id);
+  if(e.target.closest('[data-del]')){
+    if(!confirm('Delete this chat?'))return;
+    chats=chats.filter(x=>x!==c);if(cur===c)cur=null;save();
+  }else{cur=c;closeSide()}
+  renderAll();
+};
+$('#msgs').onclick=e=>{
+  const b=e.target.closest('[data-copy]');if(!b)return;
+  const code=b.closest('.code').querySelector('code').textContent;
+  (navigator.clipboard?navigator.clipboard.writeText(code):Promise.reject()).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500)},()=>{});
+};
+$('#menu').onclick=()=>document.body.classList.add('open');
+$('#scrim').onclick=closeSide;
+
+/* ---------- sign-in ---------- */
+async function ready(){
+  $('#gate').hidden=true;
+  try{const u=await puter.auth.getUser();$('#user').textContent=u&&u.username?u.username:'Signed in'}catch(e){$('#user').textContent='Signed in'}
+  renderAll();loadModels();
+}
+$('#signin').onclick=async()=>{
+  $('#gerr').textContent='';
+  try{await puter.auth.signIn();ready()}
+  catch(e){$('#gerr').textContent='Sign-in didn’t finish. Allow pop-ups for this page and try again.'}
+};
+$('#out').onclick=async()=>{try{await puter.auth.signOut()}catch(e){}$('#gate').hidden=false};
+
+(async()=>{
+  if(typeof puter==='undefined'){
+    $('#gate').hidden=false;$('#signin').hidden=true;
+    $('#gerr').textContent='Couldn’t load Puter. Check your connection and reload.';
+    return;
+  }
+  fillModels(FALLBACK);renderAll();
+  let ok=false;try{ok=await puter.auth.isSignedIn()}catch(e){}
+  ok?ready():($('#gate').hidden=false);
+})();
+</script>
+</body>
+</html>

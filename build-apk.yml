@@ -1,0 +1,262 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Create the Android project around index.html
+        run: |
+          set -e
+          test -f index.html || { echo "index.html is missing from the repo root"; exit 1; }
+          mkdir -p app/src/main/assets app/src/main/java/com/myai/chat app/src/main/res/values app/src/main/res/drawable
+          cp index.html app/src/main/assets/index.html
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'MyAIChat'
+          include ':app'
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.5.2' apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2g
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.myai.chat'
+              compileSdk 34
+              defaultConfig {
+                  applicationId 'com.myai.chat'
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName '1.0'
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          dependencies {
+              implementation 'androidx.webkit:webkit:1.11.0'
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application
+                  android:label="@string/app_name"
+                  android:icon="@drawable/ic_launcher"
+                  android:allowBackup="true"
+                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+                      android:windowSoftInputMode="adjustResize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources>
+              <string name="app_name">My AI Chat</string>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#1A1A1A"
+                  android:pathData="M24,0h60a24,24 0 0 1 24,24v60a24,24 0 0 1 -24,24h-60a24,24 0 0 1 -24,-24v-60a24,24 0 0 1 24,-24z" />
+              <path
+                  android:fillColor="#FFFFFF"
+                  android:pathData="M30,34h48a6,6 0 0 1 6,6v26a6,6 0 0 1 -6,6H58l-12,12v-12H30a6,6 0 0 1 -6,-6V40a6,6 0 0 1 6,-6z" />
+          </vector>
+          EOF
+
+          cat > app/src/main/java/com/myai/chat/MainActivity.java <<'EOF'
+          package com.myai.chat;
+
+          import android.app.Activity;
+          import android.app.Dialog;
+          import android.os.Bundle;
+          import android.os.Message;
+          import android.view.ViewGroup;
+          import android.webkit.CookieManager;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebResourceRequest;
+          import android.webkit.WebResourceResponse;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import androidx.webkit.WebViewAssetLoader;
+
+          public class MainActivity extends Activity {
+              private WebView web;
+              private WebView popupWeb;
+              private Dialog popup;
+              private WebViewAssetLoader loader;
+
+              @Override
+              protected void onCreate(Bundle state) {
+                  super.onCreate(state);
+                  loader = new WebViewAssetLoader.Builder()
+                      .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                      .build();
+                  web = new WebView(this);
+                  setContentView(web);
+                  configure(web);
+                  web.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                          return loader.shouldInterceptRequest(request.getUrl());
+                      }
+                  });
+                  web.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                          return openPopup(resultMsg);
+                      }
+                  });
+                  web.loadUrl("https://appassets.androidplatform.net/assets/index.html");
+              }
+
+              private void configure(WebView w) {
+                  WebSettings s = w.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setSupportMultipleWindows(true);
+                  s.setJavaScriptCanOpenWindowsAutomatically(true);
+                  CookieManager cm = CookieManager.getInstance();
+                  cm.setAcceptCookie(true);
+                  cm.setAcceptThirdPartyCookies(w, true);
+              }
+
+              // Puter's sign-in opens in a pop-up window; show it on top of the app.
+              private boolean openPopup(Message msg) {
+                  popupWeb = new WebView(this);
+                  configure(popupWeb);
+                  popupWeb.setWebViewClient(new WebViewClient());
+                  popupWeb.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public void onCloseWindow(WebView window) {
+                          if (popup != null) popup.dismiss();
+                      }
+                  });
+                  popup = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar);
+                  popup.setContentView(popupWeb);
+                  popup.setOnDismissListener(d -> {
+                      final WebView old = popupWeb;
+                      popupWeb = null;
+                      popup = null;
+                      if (old != null) old.post(old::destroy);
+                  });
+                  popup.show();
+                  if (popup.getWindow() != null) {
+                      popup.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+                  }
+                  WebView.WebViewTransport transport = (WebView.WebViewTransport) msg.obj;
+                  transport.setWebView(popupWeb);
+                  msg.sendToTarget();
+                  return true;
+              }
+
+              @Override
+              @SuppressWarnings("deprecation")
+              public void onBackPressed() {
+                  // Close the chat list first, then leave the app.
+                  web.evaluateJavascript(
+                      "(function(){var b=document.body;if(b.classList.contains('open')){b.classList.remove('open');return 1}return 0})()",
+                      value -> {
+                          if (!"1".equals(value)) finish();
+                      });
+              }
+
+              @Override
+              protected void onPause() {
+                  super.onPause();
+                  CookieManager.getInstance().flush();
+              }
+
+              @Override
+              protected void onDestroy() {
+                  if (popup != null) popup.dismiss();
+                  web.destroy();
+                  super.onDestroy();
+              }
+          }
+          EOF
+
+      - name: Build the APK
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MyAIChat-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish the APK as a release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: My AI Chat build ${{ github.run_number }}
+          files: app/build/outputs/apk/debug/app-debug.apk
